@@ -18,17 +18,59 @@ See options/base_options.py and options/train_options.py for more training optio
 See training and test tips at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/tips.md
 See frequently asked questions at: https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix/blob/master/docs/qa.md
 """
+
+from IPython import embed
 import time
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 from util.visualizer import Visualizer
 
+import tqdm
+from monai.transforms import (
+    Compose,
+    ScaleIntensityRangePercentiles
+)
+
+from torch.utils.data import DataLoader
+
+from ptoa.data.knee import KneeDataset
+from data.knee_dataset import KneePixDataset, PixSliceDropoutDataset, PixSliceTranslateDataset
+from aimi.data.dataset import ProstateDataset
+from data.prostate_dataset import PixProstateSliceDataset
+
 if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
-    dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
-    dataset_size = len(dataset)    # get the number of images in the dataset.
-    print('The number of training images = %d' % dataset_size)
+
+    # KDS
+    # kds = KneeDataset(load=True)
+
+    # outliers = [
+    #     'patient-ccf-51566-20211014-knee_contra', # min=-2 (looks pretty normal)
+    #     'patient-ccf-001-20210917-knee', # max=1+ (looks pretty normal)
+    # ]
+    # kds.knees = [k for k in kds.knees if k.base not in outliers]
+    # kds.zscore()
+    # dataset = PixSliceTranslateDataset(kds, slc_has_bmel=False)
+
+    # dataset_size = len(dataset)    # get the number of images in the dataset.
+    # print(f'{dataset_size} slices from {len(dataset.knees)} knees')
+    
+
+    # dataloader = DataLoader(
+    #     dataset,
+    #     batch_size=opt.batch_size,
+    #     shuffle=True,
+    # )
+
+    ### PDS
+    pds = ProstateDataset(load=True)
+    # zscore norm
+    dataset = PixProstateSliceDataset(pds)
+    dataset_size = len(dataset)
+    print(f'{dataset_size} slices from {len(pds)} prostates')
+    
+    dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
@@ -40,8 +82,7 @@ if __name__ == '__main__':
         iter_data_time = time.time()    # timer for data loading per iteration
         epoch_iter = 0                  # the number of training iterations in current epoch, reset to 0 every epoch
         visualizer.reset()              # reset the visualizer: make sure it saves the results to HTML at least once every epoch
-        model.update_learning_rate()    # update learning rates in the beginning of every epoch.
-        for i, data in enumerate(dataset):  # inner loop within one epoch
+        for i, data in enumerate(dataloader):  # inner loop within one epoch
             iter_start_time = time.time()  # timer for computation per iteration
             if total_iters % opt.print_freq == 0:
                 t_data = iter_start_time - iter_data_time
@@ -73,5 +114,6 @@ if __name__ == '__main__':
             print('saving the model at the end of epoch %d, iters %d' % (epoch, total_iters))
             model.save_networks('latest')
             model.save_networks(epoch)
+        model.update_learning_rate()    # update learning rates in the beginning of every epoch.
 
         print('End of epoch %d / %d \t Time Taken: %d sec' % (epoch, opt.n_epochs + opt.n_epochs_decay, time.time() - epoch_start_time))

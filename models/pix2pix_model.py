@@ -1,7 +1,12 @@
 import torch
 from .base_model import BaseModel
 from . import networks
+from torch import nn
+from ptoa.tsetranslate.model import CGAN
+from ptoa.tsetranslate.model import ULayer, UBlock as MyUBlock
+import matplotlib.pyplot as plt
 
+from aimi.model.losses import DiceLoss, DiceBCELoss, IoULoss, FocalLoss, TverskyLoss, FocalTverskyLoss
 
 class Pix2PixModel(BaseModel):
     """ This class implements the pix2pix model, for learning a mapping from input images to output images given paired data.
@@ -36,6 +41,14 @@ class Pix2PixModel(BaseModel):
 
         return parser
 
+    def get_current_losses(self):
+        """
+        Cancels out lambda_L1 multiplier for comparing L1 losses across models with different lambda_L1 values
+        """
+        errors_ret = super().get_current_losses()
+        errors_ret['G_L1'] /= self.opt.lambda_L1
+        return errors_ret
+        
     def __init__(self, opt):
         """Initialize the pix2pix class.
 
@@ -63,12 +76,24 @@ class Pix2PixModel(BaseModel):
         if self.isTrain:
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
-            self.criterionL1 = torch.nn.L1Loss()
+            if opt.loss_function == 'bce': self.criterionL1 = torch.nn.BCELoss()
+            elif opt.loss_function == 'dice': self.criterionL1 = DiceLoss()
+            elif opt.loss_function == 'dicebce': self.criterionL1 = DiceBCELoss()
+            elif opt.loss_function == 'iou': self.criterionL1 = IoULoss()
+            elif opt.loss_function == 'focal': self.criterionL1 = FocalLoss()
+            elif opt.loss_function == 'tversky': self.criterionL1 = TverskyLoss()
+            elif opt.loss_function == 'focaltversky': self.criterionL1 = FocalTverskyLoss()
+
+            # self.criterionL1 = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizers.append(self.optimizer_G)
             self.optimizers.append(self.optimizer_D)
+
+        if not self.isTrain:
+            self.embeddings = []
+            self.hook_handle = self.get_embeddings()
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -81,6 +106,10 @@ class Pix2PixModel(BaseModel):
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
+        # self.image_id = input['id']
+        # self.image_cp = input['cp']
+        self.image_id = input['pid']
+        self.image_cp = None
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
@@ -125,3 +154,66 @@ class Pix2PixModel(BaseModel):
         self.optimizer_G.zero_grad()        # set G's gradients to zero
         self.backward_G()                   # calculate graidents for G
         self.optimizer_G.step()             # udpate G's weights
+
+    def get_encoder(self):
+        """
+        get the netG layer that outputs the activation of the last encoding ReLU layer
+        Specific to myublock
+        For getting embeddings
+        """
+        cur = self.netG
+        while True:
+            status = 'end'
+            cur_model = getattr(cur, 'model', None)
+            if cur_model is not None:
+                cur = cur_model
+                status = 'model'
+                continue
+            for child in cur.children():
+                if isinstance(child, (MyUBlock, ULayer)):
+                    cur = child
+                    status = cur.__class__.__name__
+                    break
+            if status == 'end':
+                break
+        for child in cur.children():
+            if isinstance(child, nn.ConvTranspose2d):
+                break
+        return child
+    
+    def get_embeddings(self, layer=None):
+        if layer is None:
+            layer = self.get_encoder()
+        def hook(model, input, output):
+            self.embeddings.append(input[0].detach()[0,:,0,0])
+        return layer.register_forward_hook(hook)
+
+    def set_embeddings(self, layer=None, embeddings=None):
+        if layer is None:
+            layer = self.get_encoder()
+        if embeddings is None:
+            embeddings = self.embeddings
+        embeddings = torch.stack(embeddings).mean(dim=0).unsqueeze(0).unsqueeze(-1).unsqueeze(-1)
+        def hook(model, input):
+            return embeddings
+        return layer.register_forward_pre_hook(hook)
+
+    def show(self):
+        if self.real_A is None:
+            return False
+        n = self.real_A.shape[0]
+        for i in range(n):
+            fig, ax = plt.subplots(1, 3, figsize=(30, 10))
+            mat = ax[0].imshow(self.real_A[i,0].detach().cpu(), cmap='gray')
+            ax[0].set_title('real_dess')
+            plt.colorbar(mat, ax=ax[0])
+            mat = ax[1].imshow(self.fake_B[i,0].detach().cpu(), cmap='gray')
+            ax[1].set_title('fake_tse')
+            plt.colorbar(mat, ax=ax[1])
+            mat = ax[2].imshow(self.real_B[i,0].detach().cpu(), cmap='gray')
+            ax[2].scatter(self.image_cp[0].detach().cpu(), self.image_cp[1].detach().cpu(), s=1_000, edgecolors='r', alpha=.75, facecolors='none')
+            ax[2].set_title('real_tse')
+            plt.colorbar(mat, ax=ax[2])
+        plt.show()
+        plt.close()
+        return True
