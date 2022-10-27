@@ -57,7 +57,7 @@ class Pix2PixModel(BaseModel):
         """
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake', 'G_bce', 'G_dice', 'G_l1']
+        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -76,16 +76,7 @@ class Pix2PixModel(BaseModel):
         if self.isTrain:
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
-            if opt.loss_function == 'bce': self.criterionL1 = nn.BCELoss()
-            elif opt.loss_function == 'dice': self.criterionL1 = DiceLoss()
-            elif opt.loss_function == 'dicebce': self.criterionL1 = DiceBCELoss()
-            elif opt.loss_function == 'iou': self.criterionL1 = IoULoss()
-            elif opt.loss_function == 'focal': self.criterionL1 = FocalLoss()
-            elif opt.loss_function == 'tversky': self.criterionL1 = TverskyLoss()
-            elif opt.loss_function == 'focaltversky': self.criterionL1 = FocalTverskyLoss()
-            elif opt.loss_function == 'l1': self.criterionL1 = nn.L1Loss()
-
-            # self.criterionL1 = torch.nn.L1Loss()
+            self.criterionL1 = torch.nn.L1Loss()
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -95,12 +86,6 @@ class Pix2PixModel(BaseModel):
         if not self.isTrain:
             self.embeddings = []
             self.hook_handle = self.get_embeddings()
-
-        self.crit_bce = nn.BCELoss()
-        self.crit_dice = DiceLoss()
-        self.crit_l1 = nn.L1Loss()
-        self.loss_G_bce = None
-        self.loss_G_dice = None
 
     def set_input(self, input):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
@@ -113,10 +98,8 @@ class Pix2PixModel(BaseModel):
         AtoB = self.opt.direction == 'AtoB'
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
-        # self.image_id = input['id']
-        # self.image_cp = input['cp']
-        self.image_id = input['pid']
-        self.image_cp = None
+        self.image_id = input['id']
+        self.image_cp = input['cp']
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def forward(self):
@@ -148,12 +131,6 @@ class Pix2PixModel(BaseModel):
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
-        with torch.no_grad():
-            self.netG.eval()
-            self.loss_G_bce = self.crit_bce(self.fake_B, self.real_B)
-            self.loss_G_dice = self.crit_dice(self.fake_B, self.real_B)
-            self.loss_G_l1 = self.crit_l1(self.fake_B, self.real_B)
-            self.netG.train()
 
     def optimize_parameters(self):
         self.forward()                   # compute fake images: G(A)

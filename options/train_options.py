@@ -38,7 +38,7 @@ class TrainOptions(BaseOptions):
 
         # custom params
         parser.add_argument('--no_boneseg', action='store_true', help='use unmasked knee slices')
-        parser.add_argument('--loss_function', type=str, default='bce', help='loss function to use in place of Generator L1 loss [bce|dice|dicebce|iou|focal|tversky|focaltversky|l1]')
+        # parser.add_argument('--loss_function', type=str, default='bce', help='loss function to use in place of Generator L1 loss [bce|dice|dicebce|iou|focal|tversky|focaltversky|l1]')
 
 
         self.isTrain = True

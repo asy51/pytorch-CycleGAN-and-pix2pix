@@ -43,34 +43,25 @@ if __name__ == '__main__':
     opt = TrainOptions().parse()   # get training options
 
     # KDS
-    # kds = KneeDataset(load=True)
+    kds = KneeDataset(load=True)
 
-    # outliers = [
-    #     'patient-ccf-51566-20211014-knee_contra', # min=-2 (looks pretty normal)
-    #     'patient-ccf-001-20210917-knee', # max=1+ (looks pretty normal)
-    # ]
-    # kds.knees = [k for k in kds.knees if k.base not in outliers]
-    # kds.zscore()
-    # dataset = PixSliceTranslateDataset(kds, slc_has_bmel=False)
+    outliers = [
+        'patient-ccf-51566-20211014-knee_contra', # min=-2 (looks pretty normal)
+        'patient-ccf-001-20210917-knee', # max=1+ (looks pretty normal)
+    ]
+    kds.knees = [k for k in kds.knees if k.base not in outliers]
+    kds.zscore()
+    dataset = PixSliceTranslateDataset(kds, slc_has_bmel=False)
 
-    # dataset_size = len(dataset)    # get the number of images in the dataset.
-    # print(f'{dataset_size} slices from {len(dataset.knees)} knees')
+    dataset_size = len(dataset)    # get the number of images in the dataset.
+    print(f'{dataset_size} slices from {len(dataset.knees)} knees')
     
 
-    # dataloader = DataLoader(
-    #     dataset,
-    #     batch_size=opt.batch_size,
-    #     shuffle=True,
-    # )
-
-    ### PDS
-    pds = ProstateDataset(load=True)
-    # zscore norm
-    dataset = PixProstateSliceDataset(pds)
-    dataset_size = len(dataset)
-    print(f'{dataset_size} slices from {len(pds)} prostates')
-    
-    dataloader = DataLoader(dataset, batch_size=opt.batch_size, shuffle=True)
+    dataloader = DataLoader(
+        dataset,
+        batch_size=opt.batch_size,
+        shuffle=True,
+    )
 
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
