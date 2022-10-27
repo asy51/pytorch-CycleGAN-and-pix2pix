@@ -44,3 +44,6 @@ test/data/legacy_serialized.pt
 
 
 /wandb/
+/results*/
+.ipynb_checkpoints
+.vscode
