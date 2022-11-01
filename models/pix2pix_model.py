@@ -5,6 +5,7 @@ from torch import nn
 from ptoa.tsetranslate.model import CGAN
 from ptoa.tsetranslate.model import ULayer, UBlock as MyUBlock
 import matplotlib.pyplot as plt
+from skimage import morphology as morph
 
 from aimi.model.losses import DiceLoss, DiceBCELoss, IoULoss, FocalLoss, TverskyLoss, FocalTverskyLoss
 
@@ -87,7 +88,7 @@ class Pix2PixModel(BaseModel):
             self.embeddings = []
             self.hook_handle = self.get_embeddings()
 
-    def set_input(self, input):
+    def set_input(self, input, bonemask_val=-1):
         """Unpack input data from the dataloader and perform necessary pre-processing steps.
 
         Parameters:
@@ -96,12 +97,26 @@ class Pix2PixModel(BaseModel):
         The option 'direction' can be used to swap images in domain A and domain B.
         """
         AtoB = self.opt.direction == 'AtoB'
+        input['A'][~input['bone']] = bonemask_val
+        input['B'][~input['bone']] = bonemask_val
+
         self.real_A = input['A' if AtoB else 'B'].to(self.device)
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_id = input['id']
         self.image_cp = input['cp']
+        self.image_mask = input['bone']
+        self.image_bmel = input['bmel']
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
+    def set_input_eroded(self, input, footprint=morph.disk(5), bonemask_val=-1):
+        """
+        per-slice erosion
+        """
+        for ele_ndx in range(input['A'].shape[0]):
+            input['bone'][ele_ndx][0] = torch.from_numpy(morph.binary_erosion(input['bone'][ele_ndx][0].detach().cpu(), footprint=footprint))
+
+        self.set_input(input, bonemask_val=bonemask_val)
+    
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B = self.netG(self.real_A)  # G(A)
@@ -132,7 +147,7 @@ class Pix2PixModel(BaseModel):
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
 
-    def optimize_parameters(self):
+    def optimize_parameters(self, ):
         self.forward()                   # compute fake images: G(A)
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
@@ -144,6 +159,27 @@ class Pix2PixModel(BaseModel):
         self.optimizer_G.zero_grad()        # set G's gradients to zero
         self.backward_G()                   # calculate graidents for G
         self.optimizer_G.step()             # udpate G's weights
+
+    def get_losses(self, ):
+        self.forward()                   # compute fake images: G(A)
+        # Fake; stop backprop to the generator by detaching fake_B
+        fake_AB = torch.cat((self.real_A, self.fake_B), 1)  # we use conditional GANs; we need to feed both input and output to the discriminator
+        pred_fake = self.netD(fake_AB.detach())
+        self.loss_D_fake = self.criterionGAN(pred_fake, False)
+        # Real
+        real_AB = torch.cat((self.real_A, self.real_B), 1)
+        pred_real = self.netD(real_AB)
+        self.loss_D_real = self.criterionGAN(pred_real, True)
+        # combine loss and calculate gradients
+        self.loss_D = (self.loss_D_fake + self.loss_D_real) * 0.5
+        
+        # First, G(A) should fake the discriminator
+        self.loss_G_GAN = self.criterionGAN(pred_fake, True)
+        # Second, G(A) = B
+        self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
+        # combine loss and calculate gradients
+        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+
 
     def get_encoder(self):
         """

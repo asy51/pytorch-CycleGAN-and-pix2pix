@@ -70,6 +70,8 @@ class PixSliceTranslateDataset(SliceTranslateDataset):
             'B': real_y,
             'id': data['id'],
             'cp': data['cp'],
+            'bone': data['bone'],
+            'bmel': data['bmel'],
             'A_paths': '/home/yua4/temp/pytorch-CycleGAN-and-pix2pix/a_paths',
             'B_paths': '/home/yua4/temp/pytorch-CycleGAN-and-pix2pix/b_paths',
         }
