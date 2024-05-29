@@ -28,13 +28,17 @@ if __name__ == '__main__':
         'patient-ccf-51566-20211014-knee_contra',
         'patient-ccf-001-20210917-knee',
     ]
+    clean_bmel = [l.strip() for l in open('/home/yua4/ptoa/ptoa/data/clean_bmel_knees.txt', 'r').readlines()]
+    clean_nobmel = [l.strip() for l in open('/home/yua4/ptoa/ptoa/data/clean_nobmel_knees.txt', 'r').readlines()]
+    
     df = pd.read_csv('/home/yua4/bip_submission/hakan_bmel_intra_nifti.csv', na_values='None')
     df = df[df['base'] != 'comet-patient-ccf-015-20210920-knee']
     hakan = df['base'].to_list()
     
     knees = [k for k in kds.knees
-                if k.base not in outliers
-                if k.base not in hakan
+                if k.base in clean_nobmel
+                and k.base not in outliers
+                and k.base not in hakan
                 and k.path['BMELT'] is None
                 and all(k.path[x] is not None for x in ['IMG_TSE', 'DESS2TSE', 'BONE_TSE'])
             ]
@@ -48,7 +52,7 @@ if __name__ == '__main__':
     ds_train = PixDataset(img_size=opt.crop_size, knees=knees_train, task=opt.dataroot)
     ds_val = PixDataset(img_size=opt.crop_size, knees=knees_val, task=opt.dataroot)
 
-    print(f'TEST: {len(ds_train)} slices from {len(ds_train.knees)} knees')
+    print(f'TRN: {len(ds_train)} slices from {len(ds_train.knees)} knees')
     print(f'VAL:  {len(ds_val)} slices from {len(ds_val.knees)} knees')
     
     dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))

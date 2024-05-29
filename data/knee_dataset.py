@@ -166,7 +166,7 @@ class PixDataset(knee_monai.SliceDataset):
         elif self.task == 'inpaintbone':
             mask = (slc['BONE_TSE'] == 0).to(torch.uint8)
             seqA = 'IMG_TSE'
-            masked_A = (slc[seqA] * mask)
+            masked_A = (slc[seqB] * mask)
             masked_B = (slc[seqB])
         else: raise ValueError
 
@@ -183,6 +183,9 @@ class PixDataset(knee_monai.SliceDataset):
             'mask': mask,
             'bone': bone,
             'bmel': bmel,
+            # 'TSE_MT': slc['TSE_MT'],
+            # 'TSE_LT': slc['TSE_LT'],
+            # 'TSE_FC': slc['TSE_FC'],
             'A_paths': '/home/yua4/temp/pytorch-CycleGAN-and-pix2pix/a_paths',
             'B_paths': '/home/yua4/temp/pytorch-CycleGAN-and-pix2pix/b_paths',
         }

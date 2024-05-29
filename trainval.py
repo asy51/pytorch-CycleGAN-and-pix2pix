@@ -1,3 +1,4 @@
+from IPython import embed
 import time
 from options.train_options import TrainOptions
 from models import create_model
@@ -8,40 +9,45 @@ from torch.utils.data import random_split
 import torch
 import wandb
 
-from ptoa.data.knee import KneeDataset
+from ptoa.data.knee_monai import KneeDataset
 from data.knee_dataset import PixSliceTranslateDataset
 
 if __name__ == '__main__':
     opt = TrainOptions().parse()
 
+    # if opt.use_wandb
+    wandb_run = wandb.init(project=opt.wandb_project_name, name=opt.name, config=opt)
+    wandb_run._label(repo='pix_tsetranslate')
+
     # KDS
-    kds = KneeDataset(load=True)
+    kds = KneeDataset()
 
     outliers = [
         'patient-ccf-51566-20211014-knee_contra',
         'patient-ccf-001-20210917-knee',
     ]
-    kds.knees = [k for k in kds.knees if k.base not in outliers]
-    kds.zscore()
-    ds = PixSliceTranslateDataset(kds, slc_has_bmel=False)
+    knees = [k for k in kds.knees
+                if k.base not in outliers
+                and k.path['BMELT'] is None
+                and all(k.path[x] is not None for x in ['IMG_TSE', 'DESS2TSE', 'BONE_TSE'])
+            ]
+    n_train = int(len(knees) * 0.9)
+    n_val = len(knees) - n_train
 
-    n_train = int(len(ds) * 0.8)
-    n_val = len(ds) - n_train
+    knees_train, knees_val = random_split(knees, [n_train, n_val])
+    # knees_train, knees_val = knees[:5], knees[-1:]
 
-    ds_train, ds_val = random_split(ds, [n_train, n_val])
+    ds_train = PixSliceTranslateDataset(knees_train)
+    ds_val = PixSliceTranslateDataset(knees_val)
 
-    print(f'{len(ds)} slices from {len(ds.knees)} knees')
-    print(f'{len(ds_train)} test, {len(ds_val)} val split')
+    print(f'TEST: {len(ds_train)} slices from {len(ds_train.knees)} knees')
+    print(f'VAL:  {len(ds_val)} slices from {len(ds_val.knees)} knees')
     
     dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True)
     dl_val = DataLoader(ds_val, batch_size=opt.batch_size, shuffle=True)
 
     model = create_model(opt)
     model.setup(opt)
-
-    # if opt.use_wandb
-    wandb_run = wandb.init(project=opt.wandb_project_name, name=opt.name, config=opt)
-    wandb_run._label(repo='pix_tsetranslate')
 
     for epoch_ndx in range(1, opt.n_epochs + opt.n_epochs_decay + 1):
         epoch_start_time = time.time()
@@ -88,9 +94,11 @@ if __name__ == '__main__':
             wandb_img_data = torch.cat((model.real_A[0,0], model.fake_B[0,0].detach(), model.real_B[0,0]), axis=1)
             wandb_imgs = wandb.Image(wandb_img_data, caption="real_A, fake_B, real_B")
             wandb.log({"val_imgs": wandb_imgs})
+            print(f'logging img at end of epoch {epoch_ndx}')
 
-            print(f'saving the model at the end of epoch {epoch_ndx}')
+        if epoch_ndx == 1 or epoch_ndx % 50 == 0:
             model.save_networks(epoch_ndx)
+            print(f'saving the model at the end of epoch {epoch_ndx}')
 
         model.update_learning_rate()
 

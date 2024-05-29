@@ -32,7 +32,8 @@ from data import create_dataset
 from models import create_model
 from util.visualizer import save_images
 from util import html
-from data.knee_dataset import KneeDataset, KneePixDataset, PixSliceDropoutDataset, PixSliceTranslateDataset
+from data.knee_dataset import KneePixDataset, PixSliceDropoutDataset, PixSliceTranslateDataset
+from ptoa.data import knee_monai
 import tqdm
 from monai.transforms import (
     Compose,
@@ -55,33 +56,21 @@ if __name__ == '__main__':
     opt.serial_batches = True  # disable data shuffling; comment this line if results on randomly chosen images are needed.
     opt.no_flip = True    # no flip; comment this line if results on flipped images are needed.
     opt.display_id = -1   # no visdom display; the test code saves the results to a HTML file.
-    # dataset = KneePixDataset(boneseg=not opt.no_boneseg)
-    # dataset.knees = dataset.filter(has_bmel=True)
-    # for knee in tqdm.tqdm(dataset.knees, "loading knees"):
-    #     knee.load_obj()
-    #     knee.preprocess(transform=Compose([ScaleIntensityRangePercentiles(5, 95, 0, 2, clip=True, relative=False)]))
-    # dataset.index()
-    # dataset_size = len(dataset)    # get the number of images in the dataset.
-    # # dataset = create_dataset(opt)  # create a dataset given opt.dataset_mode and other options
-    # dataloader = DataLoader(dataset, batch_size=1)
-    # dataset = PixSliceDropoutDataset(knee_has_bmel=False, knee_count=100, slc_count=300)
-    # dataset = PixSliceTranslateDataset(knee_has_bmel=True, slc_has_bmel=False, slc_count=700)
-    kds = KneeDataset()
-    outliers = [
-        'patient-ccf-51566-20211014-knee_contra', # min=-2 (looks pretty normal)
-        'patient-ccf-001-20210917-knee', # max=1+ (looks pretty normal)
-    ]
-    kds.knees = [k for k in kds.knees if k.base not in outliers]
-    kds.zscore()
-    dataset = PixSliceTranslateDataset(kds, slc_has_bmel=True)
-                                      
-    dataset_size = len(dataset)    # get the number of images in the dataset.
-    print(f'{dataset_size} slices from {len(dataset.knees)} knees')
+    opt.isTrain = False
+    kds = knee_monai.KneeDataset()
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=opt.batch_size,
-    )
+    outliers = [
+        'patient-ccf-51566-20211014-knee_contra',
+        'patient-ccf-001-20210917-knee',
+    ]
+    knees = [k for k in kds.knees
+                if k.base not in outliers
+                and k.path['BMELT'] is not None
+                and all(k.path[x] is not None for x in ['IMG_TSE', 'DESS2TSE', 'BONE_TSE', 'BMELT'])
+            ]
+
+    ds = PixSliceTranslateDataset(knees, slc_has_bmel=True)
+    dl = DataLoader(ds, batch_size=opt.batch_size)
     
     model = create_model(opt)      # create a model given opt.model and other options
     model.setup(opt)               # regular setup: load and print networks; create schedulers
@@ -103,7 +92,7 @@ if __name__ == '__main__':
     if opt.eval:
         model.eval()
     # j = 0
-    for i, data in enumerate(dataloader):
+    for i, data in enumerate(tqdm.tqdm(dl)):
         # if 'BMEL' not in data['id']:
             # continue
         # if i >= opt.num_test:  # only apply our model to opt.num_test images.
@@ -127,3 +116,5 @@ if __name__ == '__main__':
             # print('processing (%04d)-th image... %s' % (i, img_path))
         save_images(webpage, visuals, img_path, aspect_ratio=opt.aspect_ratio, width=opt.display_winsize, use_wandb=opt.use_wandb, id_=data['id'][0])
     webpage.save()  # save the HTML
+
+# python /home/yua4/temp/pytorch-CycleGAN-and-pix2pix/test.py --dataroot NULL --name dess2tse --direction AtoB --model pix2pix --netG myublock --input_nc 1 --output_nc 1 --load_size 256 --use_wandb --epoch 110
