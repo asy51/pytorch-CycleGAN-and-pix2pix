@@ -3,7 +3,7 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
-from models.sunet import degrid_sunet7128
+# from models.sunet import degrid_sunet7128
 from ptoa.tsetranslate.model import UBlock as MyUBlock
 
 
@@ -159,8 +159,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_320':
         net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
-    elif netG == 'degrid_sunet7128':
-        net = degrid_sunet7128(num_classes=1)
+    # elif netG == 'degrid_sunet7128':
+        # net = degrid_sunet7128(num_classes=1)
     elif netG == 'casnet':
         net = CasNet()
     elif netG == 'myublock':

@@ -3,6 +3,9 @@ import argparse
 import numpy as np
 import matplotlib.pyplot as plt
 import torch
+from argparse import Namespace
+import re
+
 
 def load_opts(name, **kwargs):
     f = open(f'./checkpoints/{name}/train_opt.txt', 'r')
@@ -22,6 +25,26 @@ def load_opts(name, **kwargs):
     for k,v in kwargs.items():
         setattr(opt, k, v)
     return opt
+
+
+# def txt2opt(txtfile):
+#     with open(txtfile, 'r') as f:
+#         lines = f.readlines()
+#     ret = dict()
+#     for line in lines[1:-1]:
+#         words = re.sub(r'\[.*$', '', line).strip().split(': ')
+#         if len(words) == 2:
+#             param, val = words
+#             try:
+#                 val = ast.literal_eval(val)
+#             except:
+#                 pass
+#         else:
+#             continue
+#             param = words[0]
+#             val = ''
+#         ret[param] = val
+#     return Namespace(**ret)
 
 ### PLOT FNS
 

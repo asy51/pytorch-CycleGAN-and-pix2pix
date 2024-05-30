@@ -13,7 +13,21 @@ See our template dataset class 'template_dataset.py' for more details.
 import importlib
 import torch.utils.data
 from data.base_dataset import BaseDataset
+from data.ct_dataset import CTSliceDataset
+# from data.knee_dataset import PixDataset # MOONCOMET
+from data.fast_dataset import FastTXDS
 
+def getds(ds_str: str, **kwargs):
+    if ds_str == 'ct':
+        return CTSliceDataset.split(**kwargs)
+    elif ds_str == 'pix_translateall':
+        pass
+    elif ds_str == 'pix_translatebone':
+        pass
+    elif ds_str == 'pix_inpaintbone':
+        pass
+    elif ds_str == 'fast':
+        return FastTXDS.split(**kwargs)
 
 def find_dataset_using_name(dataset_name):
     """Import the module "data/[dataset_name]_dataset.py".

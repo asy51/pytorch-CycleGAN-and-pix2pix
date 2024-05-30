@@ -8,7 +8,7 @@ import matplotlib.pyplot as plt
 from skimage import morphology as morph
 from models.networks import UnetGenerator, UnetSkipConnectionBlock
 
-from aimi.model.losses import DiceLoss, DiceBCELoss, IoULoss, FocalLoss, TverskyLoss, FocalTverskyLoss
+# from aimi.model.losses import DiceLoss, DiceBCELoss, IoULoss, FocalLoss, TverskyLoss, FocalTverskyLoss
 
 class Pix2PixModel(BaseModel):
     """ This class implements the pix2pix model, for learning a mapping from input images to output images given paired data.
@@ -46,10 +46,10 @@ class Pix2PixModel(BaseModel):
     def get_current_losses(self, epoch_ndx, val=False):
         ret = {
             "Epoch": epoch_ndx,
-            f"G_GAN{'_val' if val else ''}": self.loss_G_GAN,
-            f"G_L1{'_val' if val else ''}": self.loss_G_L1,
-            f"D_real{'_val' if val else ''}": self.loss_D_real,
-            f"D_fake{'_val' if val else ''}": self.loss_D_fake,
+            f"G_GAN{'_val' if val else ''}": self.loss_G_GAN.item(),
+            f"G_L1{'_val' if val else ''}": self.loss_G_L1.item(),
+            f"D_real{'_val' if val else ''}": self.loss_D_real.item(),
+            f"D_fake{'_val' if val else ''}": self.loss_D_fake.item(),
         }
         return ret
         
@@ -107,8 +107,8 @@ class Pix2PixModel(BaseModel):
         self.real_B = input['B' if AtoB else 'A'].to(self.device)
         self.image_id = input['id']
         # self.image_cp = input['cp']
-        self.image_bone = input['mask']
-        self.image_bmel = input['bmel']
+        # self.image_bone = input['mask']
+        # self.image_bmel = input['bmel']
         self.image_paths = input['A_paths' if AtoB else 'B_paths']
 
     def set_input_eroded(self, input, footprint=morph.disk(5), bonemask_val=-1):
