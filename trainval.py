@@ -73,6 +73,7 @@ if __name__ == '__main__':
                     model.set_input(batch)
                     model.get_losses()
                     current_losses = model.get_current_losses(epoch_ndx=epoch_ndx, val=True)
+                    wandb_run.log(current_losses)
                     pbar.set_postfix(current_losses)
                     pbar.update(1)
         

@@ -17,7 +17,17 @@ tx = MT.Compose([
     MT.ToTensor(track_meta=False),
 ])
 
-ROOT = '/mnt/vstor/CSE_BME_CCIPD/data/CCF_Crohns_CTEs/MRMC_CROHNS_STUDY/CT_niis'
+ROOT = [
+    '/mnt/vstor/CSE_BME_CCIPD/data/CCF_Crohns_CTEs/MRMC_CROHNS_STUDY/CT_niis',
+    '/mnt/pan/Data7/mxh1029/dataset/CCF/adult/mixed_diseased_and_healthy/multidose_dvsh_grp2_CTE'
+]
+
+def get_path(grp_id, vol_id, dose):
+    if grp_id == 0:
+        path = f'{ROOT[grp_id]}/{vol_id}/{vol_id}-{dose}.nii'
+    elif grp_id == 1:
+        path = f'{ROOT[grp_id]}/{vol_id}-{dose}.nii'
+    return path
 
     # RandRotate90d(keys=["image", "label"], prob=0.5, spatial_axes=(0, 2)),
     # RandFlipd(keys=["image", "label"], spatial_axis=0, prob=0.5),
@@ -35,107 +45,116 @@ ROOT = '/mnt/vstor/CSE_BME_CCIPD/data/CCF_Crohns_CTEs/MRMC_CROHNS_STUDY/CT_niis'
 
 class CTDataset(torch.utils.data.Dataset):
     @staticmethod
-    def get_volume_ids():
-        volume_ids = sorted(int(f.split('/')[-1]) for f in glob.glob(f'{ROOT}/*') if re.match('\d+', f.split('/')[-1]))
-        for bad_id in [9, 12, 39, 74]:
-            if bad_id in volume_ids:
-                volume_ids.remove(bad_id)
-        return volume_ids 
-    def __init__(self, tx=tx, doses=[1,4]):
+    def get_ids():
+        """list of (grp_id, vol_id)"""
+        grp0_vol_ids = sorted(int(f.split('/')[-1]) for f in glob.glob(f'{ROOT[0]}/*') if re.match('\d+', f.split('/')[-1]))
+        # for bad_id in [9, 12, 39, 74]:
+        #     if bad_id in vol_ids:
+        #         vol_ids.remove(bad_id)
+        grp2_vol_ids = sorted(set(int(f.split('/')[-1].split('-')[0]) for f in glob.glob(f'{ROOT[1]}/*')))
+        return [(0, i) for i in grp0_vol_ids] + [(1, i) for i in grp2_vol_ids] 
+    def __init__(self, tx=tx, doses=[2,1]):
         """dose 1 is highest dose, 4 is lowest"""
-        self.root = ROOT
 
-        self.volume_ids = CTDataset.get_volume_ids()
-        self.volumes = {volume_id: {} for volume_id in self.volume_ids} # cache
+        self.ids = CTDataset.get_ids()
+        self.volumes = {id: {} for id in self.ids} # cache
         self.tx = tx
         self.doses = doses
-        # TODO: TI (?) Masks, GRP 2
+        # TODO: TI (?) Masks
         # reconcile folders /mnt/rds/axm788/axm788lab/radiology/gi/Crohns/CCF/adult/mixed_diseased_and_healthy/multidose_dvsh_grp1_CTE/CT_niis
         #                   /mnt/vstor/CSE_BME_CCIPD/data/CCF_Crohns_CTEs/MRMC_CROHNS_STUDY/CT_niis
 
     def __len__(self):
-        return len(self.volume_ids)
+        return len(self.ids)
     
-    def __getitem__(self, volume_ndx):
-        volume_id = self.volume_ids[volume_ndx]
+    def __getitem__(self, id_ndx):
+        id = self.ids[id_ndx]
         ret = {}
         for dose in self.doses:
-            if dose not in self.volumes[volume_id]:
-                self.load_volume(volume_id, dose)
-            ret[dose] = self.volumes[volume_id][dose]
+            if dose not in self.volumes[id]:
+                self.load_volume(*id, dose)
+            ret[dose] = self.volumes[id][dose]
         return ret
     
-    def load_volume(self, volume_id, dose):
-        print(f'loading volume_id={volume_id}[{dose}]')
-        path = f'{self.root}/{volume_id}/{volume_id}-{dose}.nii'
-        self.volumes[volume_id][dose] = self.tx(path)
-        
+    def load_volume(self, grp_id, vol_id, dose):
+        print(f'loading vol_id={grp_id}_{vol_id}[{dose}]')
+        self.volumes[grp_id,vol_id][dose] = self.tx(get_path(grp_id, vol_id, dose))
 
     def preload(self):
-        for volume_id in self.volume_ids:
+        for id in self.ids:
             for dose in self.doses:
-                self.load_volume(volume_id, dose)
-
-
+                self.load_volume(id, dose)
     
 class CTSliceDataset(CTDataset):
     @staticmethod
-    def get_slice_ids(volume_ids=None, doses=[1,4]):
-        slice_ids = []
-        volume_ids = CTDataset.get_volume_ids() if volume_ids is None else volume_ids
-        for volume_ndx, volume_id in enumerate(volume_ids):
+    def get_slc_ids(ids=None, doses=[2,1]):
+        """
+        list of (id_ndx, slc_ndx)
+        .ids[id_ndx] = (grp_id, vol_id)
+        """
+        slc_ids = []
+        ids = CTDataset.get_ids() if ids is None else ids
+        for id_ndx, (grp_id, vol_id) in enumerate(ids):
             n_slc = None
+            bad_vol = False
             for dose in doses:
-                path = f'{ROOT}/{volume_id}/{volume_id}-{dose}.nii'
+                path = get_path(grp_id, vol_id, dose)
                 if not os.path.exists(path):
                     print(f'{path} does not exist')
-                    continue
+                    bad_vol = True
+                    break
                 img = nib.load(path, mmap=False)
                 n_slc_current = img.header.get_data_shape()[-1]
                 if not n_slc:
                     n_slc = n_slc_current
                 else:
-                    assert n_slc == n_slc_current, f"{path} {n_slc_current} != {n_slc}"
-            for slc_ndx in range(n_slc):
-                slice_ids.append((volume_ndx, slc_ndx))
-        return slice_ids
+                    if n_slc != n_slc_current:
+                        print(f"{path} {n_slc_current} != {n_slc}")
+                        bad_vol = True
+                        break
+            if not bad_vol:
+                slc_ids += [(id_ndx, slc_ndx) for slc_ndx in range(n_slc)]
+        return slc_ids
 
-    def __init__(self, volume_ids=None, tx=tx, doses=[1,4]):
+    def __init__(self, ids=None, tx=tx, doses=[2,1]):
         super().__init__(tx=tx, doses=doses)
-        self.slice_ids = CTSliceDataset.get_slice_ids(volume_ids)
-        if volume_ids is not None:
-            self.volume_ids = volume_ids
+        self.slc_ids = CTSliceDataset.get_slc_ids(ids)
+        if ids is not None:
+            self.ids = ids
 
     def __len__(self):
-        return len(self.slice_ids)
+        return len(self.slc_ids)
     
     def __getitem__(self, ndx):
-        volume_ndx, slc_ndx = self.slice_ids[ndx]
-        volume_id = self.volume_ids[volume_ndx]
-        ret = super().__getitem__(volume_ndx)
+        id_ndx, slc_ndx = self.slc_ids[ndx]
+        grp_id, vol_id = self.ids[id_ndx]
+        ret = super().__getitem__(id_ndx)
         ret = {dose: ret[dose][:,slc_ndx] for dose in ret}
         return {
-            'A': ret[4],
-            'B': ret[1],
-            'volume_id': volume_id,
-            'volume_ndx': volume_ndx,
+            'A': ret[self.doses[0]],
+            'B': ret[self.doses[-1]],
+            'grp_id': grp_id,
+            'vol_id': vol_id,
+            'id_ndx': id_ndx,
             'slc_ndx': slc_ndx,
-            'id': f'{volume_id}_{slc_ndx:03d}',
+            'id': f'{grp_id}_{vol_id:02d}_{slc_ndx:03d}',
             'A_paths': '',
             'B_paths': '',
         }
     
     @classmethod
-    def split(cls, ratio=[0.8, 0.2, 0.0]):
-        volume_ids = CTDataset.get_volume_ids()
+    def split(cls, ratio=[0.8, 0.2, 0.0], random_state=42):
+        """stratify by group ids"""
+        ratio = [r/sum(ratio) for r in ratio]
         train_ratio, val_ratio, test_ratio = ratio
-        train_volume_ids, val_volume_ids = train_test_split(volume_ids, test_size=(1 - train_ratio), random_state=42)
+        ids = CTDataset.get_ids()
+        train_ids, val_ids = train_test_split(ids, test_size=(1 - train_ratio), random_state=random_state, stratify=[grp_id for grp_id, vol_id in ids])
         val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
         if test_ratio > 0:
-            val_volume_ids, test_volume_ids = train_test_split(val_volume_ids, test_size=(1 - val_ratio_adjusted), random_state=42)
+            val_ids, test_ids = train_test_split(val_ids, test_size=(1 - val_ratio_adjusted), random_state=random_state, stratify=[grp_id for grp_id, vol_id in val_ids])
 
-        ret = [cls(train_volume_ids), cls(val_volume_ids)]
+        ret = [cls(train_ids), cls(val_ids)]
         if test_ratio > 0:
-            ret.append(cls(test_volume_ids))
+            ret.append(cls(test_ids))
         
         return ret
