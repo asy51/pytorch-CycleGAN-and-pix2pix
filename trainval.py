@@ -36,14 +36,18 @@ RND = 42
 if __name__ == '__main__':
     torch.manual_seed(RND)
     opt = TrainOptions().parse()
+    # opt.name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{opt.name}"
     wandb_run = wandb.init(
         project=opt.wandb_project_name,
-        name=f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{opt.name}",
+        name=opt.name,
         config=opt
     )
 
     ds_train, ds_val, ds_test = getds(opt.dataroot, ratio=[0.7,0.2,0.1], random_state=RND)
-    print(list(ds_test.df['id'].apply(lambda row: row[:-3]).unique())) # verify testing image ids
+    print('ds_train: ', ds_train.ids)
+    print('ds_val: ', ds_val.ids)
+    print('ds_test: ', ds_test.ids)
+    # print(list(ds_test.df['id'].apply(lambda row: row[:-3]).unique())) # verify testing image ids
     # dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
     # dl_val = DataLoader(ds_val, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
     dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=0)
@@ -84,7 +88,7 @@ if __name__ == '__main__':
             wandb_run.log({"val_imgs": wandb_imgs})
             print(f'logging img at end of epoch {epoch_ndx}')
 
-        if epoch_ndx == 1 or epoch_ndx % 50 == 0:
+        if epoch_ndx == 1 or epoch_ndx % 10 == 0:
             model.save_networks(epoch_ndx)
             print(f'saving the model at the end of epoch {epoch_ndx}')
 

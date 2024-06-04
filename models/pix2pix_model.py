@@ -7,6 +7,7 @@ from ptoa.tsetranslate.model import ULayer, UBlock as MyUBlock
 import matplotlib.pyplot as plt
 from skimage import morphology as morph
 from models.networks import UnetGenerator, UnetSkipConnectionBlock
+from torchmetrics.image import StructuralSimilarityIndexMeasure, PeakSignalNoiseRatio
 
 # from aimi.model.losses import DiceLoss, DiceBCELoss, IoULoss, FocalLoss, TverskyLoss, FocalTverskyLoss
 
@@ -50,6 +51,7 @@ class Pix2PixModel(BaseModel):
             f"G_L1{'_val' if val else ''}": self.loss_G_L1.item(),
             f"D_real{'_val' if val else ''}": self.loss_D_real.item(),
             f"D_fake{'_val' if val else ''}": self.loss_D_fake.item(),
+            f"G_SSIM{'_val' if val else ''}": self.loss_G_SSIM.item(),
         }
         return ret
         
@@ -61,7 +63,7 @@ class Pix2PixModel(BaseModel):
         """
         BaseModel.__init__(self, opt)
         # specify the training losses you want to print out. The training/test scripts will call <BaseModel.get_current_losses>
-        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake']
+        self.loss_names = ['G_GAN', 'G_L1', 'D_real', 'D_fake', 'G_SSIM']
         # specify the images you want to save/display. The training/test scripts will call <BaseModel.get_current_visuals>
         self.visual_names = ['real_A', 'fake_B', 'real_B']
         # specify the models you want to save to the disk. The training/test scripts will call <BaseModel.save_networks> and <BaseModel.load_networks>
@@ -81,6 +83,7 @@ class Pix2PixModel(BaseModel):
             # define loss functions
             self.criterionGAN = networks.GANLoss(opt.gan_mode).to(self.device)
             self.criterionL1 = torch.nn.L1Loss()
+            self.criterionSSIM = StructuralSimilarityIndexMeasure().to(self.device)
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(self.netG.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
             self.optimizer_D = torch.optim.Adam(self.netD.parameters(), lr=opt.lr, betas=(opt.beta1, 0.999))
@@ -149,6 +152,8 @@ class Pix2PixModel(BaseModel):
         # combine loss and calculate gradients
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
+        self.loss_G_SSIM = self.criterionSSIM(self.fake_B, self.real_B)
+        
 
     def optimize_parameters(self, ):
         self.forward()                   # compute fake images: G(A)
@@ -183,6 +188,7 @@ class Pix2PixModel(BaseModel):
             self.loss_G_L1 = self.criterionL1(self.fake_B, self.real_B) * self.opt.lambda_L1
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
+            self.loss_G_SSIM = self.criterionSSIM(self.fake_B, self.real_B)
 
 
     def get_encoder(self):
