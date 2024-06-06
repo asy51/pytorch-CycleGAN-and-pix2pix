@@ -36,5 +36,10 @@ class TrainOptions(BaseOptions):
         parser.add_argument('--lr_policy', type=str, default='linear', help='learning rate policy. [linear | step | plateau | cosine]')
         parser.add_argument('--lr_decay_iters', type=int, default=50, help='multiply by a gamma every lr_decay_iters iterations')
 
+        # custom params
+        parser.add_argument('--no_boneseg', action='store_true', help='use unmasked knee slices')
+        # parser.add_argument('--loss_function', type=str, default='bce', help='loss function to use in place of Generator L1 loss [bce|dice|dicebce|iou|focal|tversky|focaltversky|l1]')
+
+
         self.isTrain = True
         return parser

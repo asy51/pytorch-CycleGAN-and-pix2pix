@@ -18,7 +18,7 @@ else:
     VisdomExceptionBase = ConnectionError
 
 
-def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_wandb=False):
+def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_wandb=False, id_=''):
     """Save images to the disk.
 
     Parameters:
@@ -34,12 +34,12 @@ def save_images(webpage, visuals, image_path, aspect_ratio=1.0, width=256, use_w
     short_path = ntpath.basename(image_path[0])
     name = os.path.splitext(short_path)[0]
 
-    webpage.add_header(name)
+    webpage.add_header(id_)
     ims, txts, links = [], [], []
     ims_dict = {}
     for label, im_data in visuals.items():
         im = util.tensor2im(im_data)
-        image_name = '%s_%s.png' % (name, label)
+        image_name = '%s_%s.png' % (id_, label)
         save_path = os.path.join(image_dir, image_name)
         util.save_image(im, save_path, aspect_ratio=aspect_ratio)
         ims.append(image_name)
@@ -235,6 +235,7 @@ class Visualizer():
         except VisdomExceptionBase:
             self.create_visdom_connections()
         if self.use_wandb:
+            losses['epoch'] = epoch
             self.wandb_run.log(losses)
 
     # losses: same format as |losses| of plot_current_losses

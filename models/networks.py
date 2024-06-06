@@ -3,6 +3,8 @@ import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
+# from models.sunet import degrid_sunet7128
+from ptoa.tsetranslate.model import UBlock as MyUBlock
 
 
 ###############################################################################
@@ -155,6 +157,14 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
         net = UnetGenerator(input_nc, output_nc, 7, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    elif netG == 'unet_320':
+        net = UnetGenerator(input_nc, output_nc, 6, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+    # elif netG == 'degrid_sunet7128':
+        # net = degrid_sunet7128(num_classes=1)
+    elif netG == 'casnet':
+        net = CasNet()
+    elif netG == 'myublock':
+        net = MyUBlock(use_dropout=use_dropout)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -614,3 +624,107 @@ class PixelDiscriminator(nn.Module):
     def forward(self, input):
         """Standard forward."""
         return self.net(input)
+
+
+class ULayer(nn.Module):
+    """
+    One layer of the U-Net model, including down- and up-sampling and skip connections
+    """
+    def __init__(self, outer_nc, inner_nc, input_nc=None, submodule=None, outermost=False,
+                 innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        """
+        Parameters:
+            outer_nc (int) -- the number of filters in the outer conv layer
+            inner_nc (int) -- the number of filters in the inner conv layer
+            input_nc (int) -- the number of channels in input images/features
+            submodule (ULayer) -- previously defined submodules
+            outermost (bool)    -- if this module is the outermost module
+            innermost (bool)    -- if this module is the innermost module
+            norm_layer          -- normalization layer
+            use_dropout (bool)  -- if use dropout layers.
+        """
+        super(ULayer, self).__init__()
+        self.outermost = outermost
+        use_bias = False
+        if input_nc is None:
+            input_nc = outer_nc
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+        downrelu = nn.LeakyReLU(0.2, inplace=False)
+        downnorm = norm_layer(inner_nc)
+        uprelu = nn.ReLU(inplace=False)
+        upnorm = norm_layer(outer_nc)
+
+        if outermost:
+            upconv = nn.ConvTranspose2d(inner_nc*2, outer_nc, kernel_size=4, stride=2, padding=1)
+            down = [downconv]
+            up = [uprelu, upconv, nn.Tanh()]
+            model = down + [submodule] + up
+        elif innermost:
+            upconv = nn.ConvTranspose2d(inner_nc, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            down = [downrelu, downconv]
+            up = [uprelu, upconv, upnorm]
+            model = down + up
+        else:
+            upconv = nn.ConvTranspose2d(inner_nc*2, outer_nc, kernel_size=4, stride=2, padding=1, bias=use_bias)
+            down = [downrelu, downconv, downnorm]
+            up = [uprelu, upconv, upnorm]
+            if use_dropout:
+                model = down + [submodule] + up + [nn.Dropout(0.5)]
+            else:
+                model = down + [submodule] + up
+
+        self.model = nn.Sequential(*model)
+
+    def forward(self, x):
+        return self.model(x) if self.outermost else torch.cat([x, self.model(x)], 1)
+
+class UBlock(nn.Module):
+    """
+    One instance of the U-Net model
+    """
+
+    def __init__(self, input_nc=1, output_nc=1, num_downs=8, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        """
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            output_nc (int) -- the number of channels in output images
+            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
+                                image of size 128x128 will become of size 1x1 # at the bottleneck
+            ngf (int)       -- the number of filters in the last conv layer
+            norm_layer      -- normalization layer
+
+        We construct the U-Net from the innermost layer to the outermost layer.
+        It is a recursive process.
+        """
+        super(UBlock, self).__init__()
+        # INNERMOST
+        block = ULayer(ngf*8, ngf*8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)
+        # LOWER INTERMEDIATE (NGF*8 FILTERS)
+        for _ in range(num_downs - 5):
+            block = ULayer(ngf*8, ngf*8, input_nc=None, submodule=block, norm_layer=norm_layer, use_dropout=use_dropout)
+        # UPPER INTERMEDIATE (GROW / SHRINK N_FILTERS)
+        block = ULayer(ngf*4, ngf*8, input_nc=None, submodule=block, norm_layer=norm_layer)
+        block = ULayer(ngf*2, ngf*4, input_nc=None, submodule=block, norm_layer=norm_layer)
+        block = ULayer(ngf, ngf*2, input_nc=None, submodule=block, norm_layer=norm_layer)
+        # OUTERMOST
+        self.model = ULayer(output_nc, ngf, input_nc=input_nc, submodule=block, outermost=True, norm_layer=norm_layer)
+
+    def forward(self, input):
+        """Standard forward"""
+        return self.model(input)
+
+class CasNet(nn.Module):
+    """
+    Bare-Bones Concatenation of UBlocks
+    NOT Stacked U-Net
+    """
+    def __init__(self, nblocks=6, input_nc=1, output_nc=1, num_downs=8, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        super(CasNet, self).__init__()
+        ublocks = []
+        for _ in range(nblocks):
+            ublocks.append(UBlock(input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout))
+        
+        self.model = nn.Sequential(*ublocks)
+
+    def forward(self, input):
+        return self.model(input)
