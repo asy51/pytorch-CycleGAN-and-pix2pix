@@ -57,7 +57,7 @@ if __name__ == '__main__':
     model = create_model(opt)
     model.setup(opt)
 
-    for epoch_ndx in range(1, opt.n_epochs + opt.n_epochs_decay + 1):
+    for epoch_ndx in range(opt.epoch_count + 1, opt.n_epochs + opt.n_epochs_decay + 1):
         epoch_start_time = time.time()
         
         model.train()
