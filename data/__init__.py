@@ -16,6 +16,9 @@ from data.base_dataset import BaseDataset
 from data.ct_dataset import CTSliceDataset
 # from data.knee_dataset import PixDataset # MOONCOMET
 from data.fast_dataset import FastTXDS
+from data.oai_dataset import OAISLCTXDS
+from sklearn.model_selection import train_test_split
+from copy import deepcopy
 
 def getds(ds_str: str, **kwargs):
     if ds_str == 'ct':
@@ -28,6 +31,28 @@ def getds(ds_str: str, **kwargs):
         pass
     elif ds_str == 'fast':
         return FastTXDS.split(**kwargs)
+    elif ds_str == 'oai':
+        ds = OAISLCTXDS()
+        ratio = [r/sum(kwargs['ratio']) for r in kwargs['ratio']]
+        train_ratio, val_ratio, test_ratio = ratio
+        train_ratio, val_ratio, test_ratio
+        skey_train, skey_val = train_test_split(list(set(ds.df['SUBJECTKEY'])), test_size=(1 - train_ratio), random_state=kwargs['random_state'])
+        if test_ratio > 0:
+            val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
+            skey_val, skey_test = train_test_split(skey_val, test_size=(1 - val_ratio_adjusted), random_state=kwargs['random_state'])
+        ds_train = deepcopy(ds)
+        ds_train.df = ds.df[ds.df['SUBJECTKEY'].isin(skey_train)]
+        ds_train.index_slices()
+        ds_val = deepcopy(ds)
+        ds_val.df = ds.df[ds.df['SUBJECTKEY'].isin(skey_val)]
+        ds_val.index_slices()
+        ret = [ds_train, ds_val]
+        if test_ratio > 0:
+            ds_test = deepcopy(ds)
+            ds_test.df = ds.df[ds.df['SUBJECTKEY'].isin(skey_test)]
+            ds_test.index_slices()
+        ret.append(ds_test)
+        return ret
 
 def find_dataset_using_name(dataset_name):
     """Import the module "data/[dataset_name]_dataset.py".

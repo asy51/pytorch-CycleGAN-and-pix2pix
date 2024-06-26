@@ -4,7 +4,7 @@ from util import util
 import torch
 import models
 import data
-
+from datetime import datetime
 
 class BaseOptions():
     """This class defines options used during both training and test time.
@@ -123,6 +123,7 @@ class BaseOptions():
             suffix = ('_' + opt.suffix.format(**vars(opt))) if opt.suffix != '' else ''
             opt.name = opt.name + suffix
 
+        opt.name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{opt.name}"
         self.print_options(opt)
 
         # set gpu ids

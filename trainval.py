@@ -16,27 +16,11 @@ from tqdm import tqdm
 from data.fast_dataset import FastTXDS
 from data import getds
 
-# def run_epoch(model, dl, epoch_ndx, phase='train'):
-#     epoch_loss = {loss_name: 0 for loss_name in model.loss_names}
-#     if phase == 'train':
-#         model.train()
-#         pbar = tqdm(dl, desc=f'{epoch_ndx:4d}')
-#         for batch in pbar:    
-#             model.set_input(batch)
-#             if phase == 'train':
-#                 model.optimize_parameters()
-#             else:
-#                 model.get_losses()
-#             current_losses = model.get_current_losses(epoch_ndx=epoch_ndx)
-#             for loss_name in model.loss_names:
-#                 epoch_loss[loss_name] += current_losses[loss_name]
-
 RND = 42
 
 if __name__ == '__main__':
     torch.manual_seed(RND)
     opt = TrainOptions().parse()
-    # opt.name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{opt.name}"
     wandb_run = wandb.init(
         project=opt.wandb_project_name,
         name=opt.name,
@@ -44,20 +28,19 @@ if __name__ == '__main__':
     )
 
     ds_train, ds_val, ds_test = getds(opt.dataroot, ratio=[0.7,0.2,0.1], random_state=RND)
-    print('ds_train: ', ds_train.ids)
-    print('ds_val: ', ds_val.ids)
-    print('ds_test: ', ds_test.ids)
+    print('ds_train: ', len(ds_train))
+    print('ds_val: ', len(ds_val))
+    print('ds_test: ', len(ds_test))
     # print(list(ds_test.df['id'].apply(lambda row: row[:-3]).unique())) # verify testing image ids
     # dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
     # dl_val = DataLoader(ds_val, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
-    dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=0)
-    dl_val = DataLoader(ds_val, batch_size=opt.batch_size, shuffle=True, num_workers=0)
-    # dl_test = DataLoader(ds_test, batch_size=opt.batch_size, shuffle=True, num_workers=0)
-
+    dl_train = DataLoader(ds_train, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
+    dl_val = DataLoader(ds_val, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
+    # dl_test = DataLoader(ds_test, batch_size=opt.batch_size, shuffle=True, num_workers=int(opt.num_threads))
     model = create_model(opt)
     model.setup(opt)
 
-    for epoch_ndx in range(opt.epoch_count + 1, opt.n_epochs + opt.n_epochs_decay + 1):
+    for epoch_ndx in range(opt.epoch_count, opt.n_epochs + opt.n_epochs_decay):
         epoch_start_time = time.time()
         
         model.train()

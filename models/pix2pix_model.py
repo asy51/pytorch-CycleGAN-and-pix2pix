@@ -1,4 +1,4 @@
-git@github.com:asy51/pytorch-CycleGAN-and-pix2pix.gitimport torch
+import torch
 from .base_model import BaseModel
 from . import networks
 from torch import nn
