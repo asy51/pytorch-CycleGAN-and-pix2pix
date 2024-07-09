@@ -1,4 +1,4 @@
-from bmel.data import fastmri
+from fetch import fastmri
 
 class FastTXDS(fastmri.FastTXDS):
     def __getitem__(self, ndx):

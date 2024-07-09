@@ -153,6 +153,7 @@ class Pix2PixModel(BaseModel):
         self.loss_G = self.loss_G_GAN + self.loss_G_L1
         self.loss_G.backward()
         self.loss_G_SSIM = self.criterionSSIM(self.fake_B, self.real_B)
+        self.criterionSSIM.reset()
         
 
     def optimize_parameters(self, ):
@@ -189,6 +190,7 @@ class Pix2PixModel(BaseModel):
             # combine loss and calculate gradients
             self.loss_G = self.loss_G_GAN + self.loss_G_L1
             self.loss_G_SSIM = self.criterionSSIM(self.fake_B, self.real_B)
+            self.criterionSSIM.reset()
 
 
     def get_encoder(self):

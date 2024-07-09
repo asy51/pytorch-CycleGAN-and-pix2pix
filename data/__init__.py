@@ -16,10 +16,11 @@ from data.base_dataset import BaseDataset
 from data.ct_dataset import CTSliceDataset
 # from data.knee_dataset import PixDataset # MOONCOMET
 from data.fast_dataset import FastTXDS
-from data.oai_dataset import OAISLCTXDS
-from data.mooncomet_dataset import MCSlcDS
+from data.oai_dataset import OAISLCTXDS, ZIBSLCDS
+from data.mooncomet_dataset import MCSLCDS
 from sklearn.model_selection import train_test_split
 from copy import deepcopy
+from fetch.transforms import get_tx, tx_dict
 
 def getds(ds_str: str, **kwargs):
     if ds_str == 'ct':
@@ -53,8 +54,8 @@ def getds(ds_str: str, **kwargs):
             ret.append(ds_test)
         return ret
     elif ds_str == 'mooncomet':
-        ds = MCSlcDS()
-                train_ratio, val_ratio, test_ratio = [r/sum(kwargs['ratio']) for r in kwargs['ratio']]
+        ds = MCSLCDS(root='/home/yua4/LiX6Lab', task='translateall', tx=tx_dict(sequences=['DESS2TSE', 'TSE'], img_size=256))
+        train_ratio, val_ratio, test_ratio = [r/sum(kwargs['ratio']) for r in kwargs['ratio']]
         df_train, df_val = train_test_split(ds.df, test_size=(1-train_ratio), random_state=kwargs['random_state'])
         if test_ratio > 0:
             val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
@@ -72,7 +73,26 @@ def getds(ds_str: str, **kwargs):
             ds_test.index_slices()
             ret.append(ds_test)
         return ret
-
+    elif ds_str == 'oai_mask':
+        ds = ZIBSLCDS()
+        train_ratio, val_ratio, test_ratio = [r/sum(kwargs['ratio']) for r in kwargs['ratio']]
+        df_train, df_val = train_test_split(ds.df, test_size=(1-train_ratio), random_state=kwargs['random_state'])
+        if test_ratio > 0:
+            val_ratio_adjusted = val_ratio / (val_ratio + test_ratio)
+            df_val, df_test = train_test_split(df_val, test_size=(1-val_ratio_adjusted), random_state=kwargs['random_state'])
+        ds_train = deepcopy(ds)
+        ds_train.df = df_train
+        ds_train.index_slices()
+        ds_val = deepcopy(ds)
+        ds_val.df = df_val
+        ds_val.index_slices()
+        ret = [ds_train, ds_val]
+        if test_ratio > 0:
+            ds_test = deepcopy(ds)
+            ds_test.df = df_test
+            ds_test.index_slices()
+            ret.append(ds_test)
+        return ret
         
 
 def find_dataset_using_name(dataset_name):

@@ -53,7 +53,7 @@ if __name__ == '__main__':
                 pbar.set_postfix(current_losses)
                 pbar.update(1)
 
-        if epoch_ndx == 1 or epoch_ndx % 5 == 0: # VALIDATE
+        if epoch_ndx == 1 or epoch_ndx % opt.val_epoch_freq == 0: # VALIDATE
             model.eval()
             with tqdm(total=len(dl_val), desc=f'VAL E{epoch_ndx:4d}') as pbar:
                 for batch_ndx, batch in enumerate(dl_val):
@@ -64,14 +64,14 @@ if __name__ == '__main__':
                     pbar.set_postfix(current_losses)
                     pbar.update(1)
         
-        if epoch_ndx == 1 or epoch_ndx % 10 == 0:
+        if epoch_ndx == 1 or epoch_ndx % opt.img_epoch_freq == 0:
             # log last val batch images
             wandb_img_data = torch.cat((model.real_A[0,0], model.fake_B[0,0].detach(), model.real_B[0,0]), axis=1)
             wandb_imgs = wandb.Image(wandb_img_data, caption=f"{batch['id'][0]}; real_A, fake_B, real_B")
             wandb_run.log({"val_imgs": wandb_imgs})
             print(f'logging img at end of epoch {epoch_ndx}')
 
-        if epoch_ndx == 1 or epoch_ndx % 10 == 0:
+        if epoch_ndx == 1 or epoch_ndx % opt.save_epoch_freq == 0:
             model.save_networks(epoch_ndx)
             print(f'saving the model at the end of epoch {epoch_ndx}')
 

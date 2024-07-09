@@ -1,5 +1,3 @@
-from IPython import embed
-
 import argparse
 import os
 from util import util
@@ -125,8 +123,6 @@ class BaseOptions():
             suffix = ('_' + opt.suffix.format(**vars(opt))) if opt.suffix != '' else ''
             opt.name = opt.name + suffix
 
-
-        embed()
         if opt.epoch is None:
             opt.name = f"{datetime.now().strftime('%y%m%d_%H%M%S')}_{opt.name}"
         self.print_options(opt)
